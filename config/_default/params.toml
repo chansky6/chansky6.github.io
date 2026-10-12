@@ -18,7 +18,7 @@ SortBy              = "default"
     lastUpdated = ":date_full"
 
 [sidebar]
-    emoji    = "🍥"
+    emoji    = "👋🏻"
     subtitle = "道可至而不可求"
     avatar   = "img/avatar.jpeg"
 
@@ -51,7 +51,21 @@ SortBy              = "default"
 ## Comments
 [comments]
     enabled  = true
-    provider = "disqus"
+    provider = "giscus"
 
     # See all the available configurations at https://github.com/CaiJimmy/hugo-theme-stack/blob/master/config/_default/params.toml
     # Copy the configurations you need from there and paste it here.
+    [comments.giscus]
+        repo             = "chansky6/chansky6.github.io"
+        repoID           = "R_kgDOVDsjwg"
+        category         = "General"
+        categoryID       = "DIC_kwDOVDsjws4DIAbz"
+        mapping          = "title"
+        lightTheme       = "light"
+        darkTheme        = "dark_dimmed"
+        reactionsEnabled = 1
+        emitMetadata     = 0
+        inputPosition    = "top"
+        lang             = "zh-CN"
+        strict           = 0
+        loading          = "lazy"
