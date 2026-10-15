@@ -1,0 +1,102 @@
+/// Stack 主题 helper/image 的覆盖版本。
+/// 在原逻辑之上增加:文章未设置 image 时,按文章日期自动使用当天的必应每日壁纸。
+/// 数据来源:github.com/niumoo/bing-wallpaper 按天页面(约 7KB)中嵌入的壁纸 URL。
+/// 在 front matter 中设置 image: false 可为单篇文章禁用此回退。
+
+{{ $result := dict }}
+
+{{/* ---------- 前置步骤:无 image 参数的文章页,回退到当天必应壁纸 ---------- */}}
+{{ $imageParam := .Image }}
+
+{{ if not $imageParam }}
+    {{ $ctx := .Context }}
+    {{ if and $ctx (ne $ctx.Params.image false) $ctx.IsPage (eq $ctx.Type "post") }}
+        {{ with $ctx.Date }}
+            {{ $date := time . }}
+            {{ $ym := $date.Format "200601" }}
+            {{ $dd := $date.Format "02" }}
+            {{/* zh-cn 数据从 2023-02 开始,更早日期回退 en-us */}}
+            {{ $market := "zh-cn" }}
+            {{ if lt $date (time "2023-02-01") }}
+                {{ $market = "en-us" }}
+            {{ end }}
+            {{ $rawURL := printf "https://raw.githubusercontent.com/niumoo/bing-wallpaper/main/docs/%s/day/%s/%s.html" $market $ym $dd }}
+            {{ with try (resources.GetRemote $rawURL (dict "timeout" "10s")) }}
+                {{ with .Err }}
+                    {{ warnf "bing-wallpaper fetch failed (%s): %s" $rawURL . }}
+                {{ else with .Value }}
+                    {{ $matches := findRE `https://cn\.bing\.com/th\?id=[^"&\s]+` .Content 1 }}
+                    {{ with index $matches 0 }}
+                        {{/* 追加尺寸参数:封面用 1920 宽即可,避免下载 4K 原图 */}}
+                        {{ $imageParam = printf "%s&pid=hp&w=1920" . }}
+                    {{ else }}
+                        {{ warnf "bing-wallpaper: no wallpaper URL found in %s" $rawURL }}
+                    {{ end }}
+                {{ else }}
+                    {{ warnf "bing-wallpaper: empty response from %s" $rawURL }}
+                {{ end }}
+            {{ end }}
+        {{ end }}
+    {{ end }}
+{{ end }}
+
+{{/* ---------- 以下为原主题逻辑,仅将 .Image 换成 $imageParam ---------- */}}
+{{ if $imageParam }}
+    {{ $url := urls.Parse $imageParam }}
+    {{ $permalink := $imageParam }}
+
+    {{ $result = dict
+        "Resource" nil
+        "Permalink" $permalink
+        "Height" nil
+        "Width" nil
+    }}
+    {{ $resource := dict }} 
+    {{ $local := true }}
+
+    {{ if not (in (slice "https" "http") $url.Scheme) }}
+        {{/* Local image */}}
+        {{ $resource = .Resources.Get (printf "%s" ($imageParam | safeURL)) }}
+    {{ else }}
+        {{/* Remote image */}}
+        {{ with try (resources.GetRemote $url (dict "timeout" .Context.Site.Params.imageProcessing.external.timeout)) }}
+            {{ with .Err }}
+                {{ warnf "Failed to fetch remote resource %q: %s" $url . }}
+            {{ else with .Value }}
+                {{ $resource = . }}
+                {{ $local = false }}
+            {{ else }}
+                {{ warnf "Unable to get remote resource %q" $url }}
+            {{ end }}
+        {{ end }}   
+    {{ end }}
+
+    {{ if $resource }}
+        {{ if and .Context.Site.Params.imageProcessing.autoOrient (reflect.IsImageResourceProcessable $resource) }}
+            {{ $filter := images.AutoOrient }}
+            {{ $resource = $resource | images.Filter $filter }}
+        {{ end }}
+
+        {{ if $local }}
+            {{ $permalink = $resource.RelPermalink }}
+        {{ end }}
+
+        {{ if reflect.IsImageResourceWithMeta $resource }}
+            {{ $result = dict
+                "Resource" $resource
+                "Permalink" $permalink
+                "Height" $resource.Height
+                "Width" $resource.Width
+            }}
+        {{ else }}
+            {{ $result = dict
+                "Resource" $resource
+                "Permalink" $permalink
+                "Height" nil
+                "Width" nil
+            }}
+        {{ end }}
+    {{ end }}
+{{ end }}
+
+{{ return $result }}
